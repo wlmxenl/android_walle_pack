@@ -1,137 +1,102 @@
 #!/usr/bin/python
 # -*-coding:utf-8-*-
 
-# /**
-#  * ================================================
-#  * 作    者：JayGoo
-#  * 版    本：1.0.1
-#  * 更新日期：2017/12/29
-#  * 邮    箱: 1015121748@qq.com
-#  * ================================================
-#  */
-
 import os
-import sys
-import platform
-
-
-# 获取脚本文件的当前路径
-def curFileDir():
-    # 获取脚本路径
-    path = sys.path[0]
-    # 判断为脚本文件还是py2exe编译后的文件，
-    # 如果是脚本文件，则返回的是脚本的目录，
-    # 如果是编译后的文件，则返回的是编译后的文件路径
-    if os.path.isdir(path):
-        return path
-    elif os.path.isfile(path):
-        return os.path.dirname(path)
-
-
-# 判断当前系统
-def isWindows():
-    sysstr = platform.system()
-    if ("Windows" in sysstr):
-        return 1
-    else:
-        return 0
-
-
-# 兼容不同系统的路径分隔符
-def getBackslash():
-    if (isWindows() == 1):
-        return "\\"
-    else:
-        return "/"
-
-
-# 清空临时资源
-def cleanTempResource():
-    try:
-        os.remove(zipalignedApkPath)
-        os.remove(signedApkPath)
-        pass
-    except Exception:
-        pass
-
-
-# 清空渠道信息
-def cleanChannelsFiles():
-    try:
-        os.makedirs(channelsOutputFilePath)
-        pass
-    except Exception:
-        pass
-
-
-# 创建Channels输出文件夹
-def createChannelsDir():
-    try:
-        os.makedirs(channelsOutputFilePath)
-        pass
-    except Exception:
-        pass
-
-
-# 当前脚本文件所在目录
-parentPath = curFileDir() + getBackslash()
+import re
+import config
+import pack_util
 
 # config
-libPath = parentPath + "lib" + getBackslash()
-buildToolsPath = config.sdkBuildToolPath + getBackslash()
-checkAndroidV2SignaturePath = libPath + "CheckAndroidV2Signature.jar"
-walleChannelWritterPath = libPath + "walle-cli-all.jar"
-keystorePath = config.keystorePath
+buildToolsPath = pack_util.getBuildToolsPath(config.sdkBuildToolVersion)
+checkAndroidV2SignaturePath = pack_util.getSubDirFilePath("lib", "CheckAndroidV2Signature.jar")
+walleChannelWritterPath = pack_util.getSubDirFilePath("lib", "walle-cli-all.jar")
+
+keystorePath = pack_util.getSubDirFilePath("source", config.storeFile)
 keyAlias = config.keyAlias
 keystorePassword = config.keystorePassword
 keyPassword = config.keyPassword
-channelsOutputFilePath = parentPath + "channels"
-channelFilePath = parentPath + "channel_360"
-protectedSourceApkPath = parentPath + config.protectedSourceApkName
 
-# 检查自定义路径，并作替换
-if len(config.protectedSourceApkDirPath) > 0:
-    protectedSourceApkPath = config.protectedSourceApkDirPath + getBackslash() + config.protectedSourceApkName
 
-if len(config.channelsOutputFilePath) > 0:
-    channelsOutputFilePath = config.channelsOutputFilePath
+def autoPack(pack_config):
+    """
+    批量签名并写入渠道号
+    :param pack_config: 配置
+    :return: None
+    """
+    protectedSourceApkPath = pack_util.getSubDirFilePath("source", pack_config[0])
 
-if len(config.channelFilePath) > 0:
-    channelFilePath = config.channelFilePath
+    # 对齐
+    zipAlignedApkPath = protectedSourceApkPath[0: -4] + "_aligned.apk"
+    pack_util.deleteFile(zipAlignedApkPath)
 
-zipalignedApkPath = protectedSourceApkPath[0: -4] + "_aligned.apk"
-signedApkPath = zipalignedApkPath[0: -4] + "_signed.apk"
+    zipalignShell = buildToolsPath + os.sep + "zipalign -v 4 " + protectedSourceApkPath + " " + zipAlignedApkPath
+    os.system(zipalignShell)
+    print(zipalignShell)
 
-# 创建Channels输出文件夹
-createChannelsDir()
+    # 签名
+    signedApkPath = zipAlignedApkPath[0: -4] + "_signed.apk"
+    pack_util.deleteFile(signedApkPath)
 
-# 清空Channels输出文件夹
-cleanChannelsFiles()
+    signShell = buildToolsPath + os.sep + "apksigner sign --ks " + keystorePath + \
+                " --ks-key-alias " + keyAlias + \
+                " --ks-pass pass:" + keystorePassword + \
+                " --key-pass pass:" + keyPassword + \
+                " --out " + signedApkPath + \
+                " " + zipAlignedApkPath
+    os.system(signShell)
+    print(signShell)
 
-# 对齐
-zipalignShell = buildToolsPath + "zipalign -v 4 " + protectedSourceApkPath + " " + zipalignedApkPath
-os.system(zipalignShell)
+    # 检查V2签名是否正确
+    checkV2Shell = "java -jar " + checkAndroidV2SignaturePath + " " + signedApkPath
+    os.system(checkV2Shell)
 
-# 签名
-signShell = buildToolsPath + "apksigner sign --ks " + keystorePath + " --ks-key-alias " + keyAlias + " --ks-pass pass:" + keystorePassword + " --key-pass pass:" + keyPassword + " --out " + signedApkPath + " " + zipalignedApkPath
-os.system(signShell)
-print(signShell)
+    # 清空输出文件目录
+    outputDirPath = os.path.join(os.getcwd(), "channels", pack_config[0][0:-4])
+    if not os.path.exists(outputDirPath):
+        os.makedirs(outputDirPath)
 
-# 检查V2签名是否正确
-checkV2Shell = "java -jar " + checkAndroidV2SignaturePath + " " + signedApkPath;
-os.system(checkV2Shell)
+    with os.scandir(outputDirPath) as it:
+        for entity in it:
+            if entity.is_file():
+                os.remove(entity)
+    pass
 
-# 写入渠道
-if len(config.extraChannelFilePath) > 0:
-    writeChannelShell = "java -jar " + walleChannelWritterPath + " batch2 -f " + config.extraChannelFilePath + " " + signedApkPath + " " + channelsOutputFilePath
-else:
-    writeChannelShell = "java -jar " + walleChannelWritterPath + " batch -f " + channelFilePath + " " + signedApkPath + " " + channelsOutputFilePath
+    # 批量写入渠道号
+    channelFilePath = pack_util.getProjectDirFilePath(pack_config[1])
+    writeChannelShell = "java -jar " + walleChannelWritterPath + \
+                        " batch -f " + channelFilePath + " " + signedApkPath + " " + outputDirPath
+    print(writeChannelShell)
+    os.system(writeChannelShell)
 
-os.system(writeChannelShell)
+    # 删除临时文件
+    pack_util.deleteFile(zipAlignedApkPath)
+    pack_util.deleteFile(signedApkPath)
 
-cleanTempResource()
+    # 文件重命名
+    if len(config.appName) > 0 and len(config.appVersion) > 0 and len(config.apkFileNamePattern) > 0:
+        with os.scandir(outputDirPath) as it:
+            for file in it:
+                print(file.path)
+                # 提取渠道名称，360_aligned_signed_huawei.apk -> huawei
+                channelName = re.findall('.+_signed_(\\w+).apk$', file.path)[0]
+                # 重命名, sample_1.0_huawei_release1.apk
+                newFileName = config.apkFileNamePattern % channelName
+                os.renames(file.path, os.path.join(os.path.dirname(file.path), newFileName))
+        pass
 
-print("\n**** =============================TASK FINISHED=================================== ****\n")
-print("\n↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓   Please check channels in the path   ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓\n")
-print("\n" + channelsOutputFilePath + "\n")
+    print("\n↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓   Please check channels in the path   ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓\n")
+    print("\n" + outputDirPath + "\n")
+    print("\n↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑   Please check channels in the path   ↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑\n")
+    pass
+
+
+# 根据配置打包
+for packConfig in config.autoPackConfig:
+    try:
+        if os.path.exists(pack_util.getSubDirFilePath("source", packConfig[0])):
+            autoPack(packConfig)
+    except FileNotFoundError as e:
+        print(packConfig[0] + " not found")
+        pass
+
 print("\n**** =============================TASK FINISHED=================================== ****\n")
