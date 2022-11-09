@@ -1,3 +1,4 @@
+import getpass
 import os
 import platform
 
@@ -12,6 +13,7 @@ def getBuildToolsPath(build_tools_version):
         raise AttributeError("buildToolsVersion required")
 
     build_tools_abs_path = ""
+    # windows
     if platform.system() == 'Windows':
         for envItem in os.environ.items():
             if envItem[0] == 'PATH':
@@ -19,6 +21,11 @@ def getBuildToolsPath(build_tools_version):
                     if pathEnvItem.__contains__("platform-tools"):
                         sdk_path = os.path.dirname(pathEnvItem)
                         build_tools_abs_path = os.path.join(sdk_path, "build-tools", build_tools_version)
+        pass
+    # macos
+    elif platform.system() == 'Darwin':
+        sdk_path = "/Users/" + getpass.getuser() + "/Library/Android/sdk"
+        build_tools_abs_path = os.path.join(sdk_path, "build-tools", build_tools_version)
         pass
 
     if not os.path.exists(build_tools_abs_path):
