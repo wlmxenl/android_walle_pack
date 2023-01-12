@@ -3,18 +3,18 @@
 
 import os
 import re
-import config
-import pack_util
+import PackConfig
+import PackUtils
 
 # config
-buildToolsPath = pack_util.getBuildToolsPath(config.sdkBuildToolVersion)
-checkAndroidV2SignaturePath = pack_util.getSubDirFilePath("lib", "CheckAndroidV2Signature.jar")
-walleChannelWritterPath = pack_util.getSubDirFilePath("lib", "walle-cli-all.jar")
+buildToolsPath = PackUtils.getBuildToolsPath(PackConfig.sdkBuildToolVersion)
+checkAndroidV2SignaturePath = PackUtils.getSubDirFilePath("lib", "CheckAndroidV2Signature.jar")
+walleChannelWritterPath = PackUtils.getSubDirFilePath("lib", "walle-cli-all.jar")
 
-keystorePath = pack_util.getSubDirFilePath("source", config.storeFile)
-keyAlias = config.keyAlias
-keystorePassword = config.keystorePassword
-keyPassword = config.keyPassword
+keystorePath = PackUtils.getSubDirFilePath("source", PackConfig.storeFile)
+keyAlias = PackConfig.keyAlias
+keystorePassword = PackConfig.keystorePassword
+keyPassword = PackConfig.keyPassword
 
 
 def autoPack(pack_config):
@@ -23,11 +23,12 @@ def autoPack(pack_config):
     :param pack_config: 配置
     :return: None
     """
-    protectedSourceApkPath = pack_util.getSubDirFilePath("source", pack_config[0])
+    protectedSourceApkPath = PackUtils.getSubDirFilePath("source", pack_config[0])
+    apkVersionName = PackUtils.getApkVersionName(protectedSourceApkPath)
 
     # 对齐
     zipAlignedApkPath = protectedSourceApkPath[0: -4] + "_aligned.apk"
-    pack_util.deleteFile(zipAlignedApkPath)
+    PackUtils.deleteFile(zipAlignedApkPath)
 
     zipalignShell = buildToolsPath + os.sep + "zipalign -v 4 " + protectedSourceApkPath + " " + zipAlignedApkPath
     os.system(zipalignShell)
@@ -35,7 +36,7 @@ def autoPack(pack_config):
 
     # 签名
     signedApkPath = zipAlignedApkPath[0: -4] + "_signed.apk"
-    pack_util.deleteFile(signedApkPath)
+    PackUtils.deleteFile(signedApkPath)
 
     signShell = buildToolsPath + os.sep + "apksigner sign --ks " + keystorePath + \
                 " --ks-key-alias " + keyAlias + \
@@ -62,25 +63,25 @@ def autoPack(pack_config):
     pass
 
     # 批量写入渠道号
-    channelFilePath = pack_util.getProjectDirFilePath(pack_config[1])
+    channelFilePath = PackUtils.getProjectDirFilePath(pack_config[1])
     writeChannelShell = "java -jar " + walleChannelWritterPath + \
                         " batch -f " + channelFilePath + " " + signedApkPath + " " + outputDirPath
     print(writeChannelShell)
     os.system(writeChannelShell)
 
     # 删除临时文件
-    pack_util.deleteFile(zipAlignedApkPath)
-    pack_util.deleteFile(signedApkPath)
+    PackUtils.deleteFile(zipAlignedApkPath)
+    PackUtils.deleteFile(signedApkPath)
 
     # 文件重命名
-    if len(config.appName) > 0 and len(config.appVersion) > 0 and len(config.apkFileNamePattern) > 0:
+    if len(PackConfig.apkFileNamePattern) > 0:
         with os.scandir(outputDirPath) as it:
             for file in it:
                 print(file.path)
                 # 提取渠道名称，360_aligned_signed_huawei.apk -> huawei
-                channelName = re.findall('.+_signed_(\\w+).apk$', file.path)[0]
+                channelName = re.findall(".+_signed_(\S+).apk$", file.path)[0]
                 # 重命名, sample_1.0_huawei_release1.apk
-                newFileName = config.apkFileNamePattern % channelName
+                newFileName = PackConfig.apkFileNamePattern % (apkVersionName, channelName)
                 os.renames(file.path, os.path.join(os.path.dirname(file.path), newFileName))
         pass
 
@@ -91,9 +92,9 @@ def autoPack(pack_config):
 
 
 # 根据配置打包
-for packConfig in config.autoPackConfig:
+for packConfig in PackConfig.autoPackConfig:
     try:
-        if os.path.exists(pack_util.getSubDirFilePath("source", packConfig[0])):
+        if os.path.exists(PackUtils.getSubDirFilePath("source", packConfig[0])):
             autoPack(packConfig)
     except FileNotFoundError as e:
         print(packConfig[0] + " not found")

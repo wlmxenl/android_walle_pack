@@ -16,10 +16,6 @@ autoPackConfig = [
     ("legu.apk", "channel_legu")
 ]
 
-# 应用版本号
-appName = "sample"
-appVersion = "1.0"
-
-# %s 打包完成后会替换为渠道名称
-# 示例：sample_1.0_huawei_release.apk
-apkFileNamePattern = appName + "_" + appVersion + "_%s_release.apk"
+# 输出渠道文件名配置
+# sample_{版本号}_{渠道号}_release.apk, eg：sample_1.0_huawei_release.apk
+apkFileNamePattern = "sample_%s_%s_release.apk"

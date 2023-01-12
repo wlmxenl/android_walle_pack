@@ -1,7 +1,8 @@
 import getpass
 import os
 import platform
-
+import re
+import PackConfig
 
 def getBuildToolsPath(build_tools_version):
     """
@@ -15,12 +16,10 @@ def getBuildToolsPath(build_tools_version):
     build_tools_abs_path = ""
     # windows
     if platform.system() == 'Windows':
-        for envItem in os.environ.items():
-            if envItem[0] == 'PATH':
-                for pathEnvItem in envItem[1].split(";"):
-                    if pathEnvItem.__contains__("platform-tools"):
-                        sdk_path = os.path.dirname(pathEnvItem)
-                        build_tools_abs_path = os.path.join(sdk_path, "build-tools", build_tools_version)
+        for envItem in os.getenv('PATH').split(";"):
+            if envItem.__contains__("platform-tools"):
+                sdk_path = os.path.dirname(envItem)
+                build_tools_abs_path = os.path.join(sdk_path, "build-tools", build_tools_version)
         pass
     # macos
     elif platform.system() == 'Darwin':
@@ -67,3 +66,14 @@ def deleteFile(file_path):
     """
     if os.path.exists(file_path):
         os.remove(file_path)
+
+
+def getApkVersionName(apk_file_path):
+    aapt_path = os.path.join(getBuildToolsPath(PackConfig.sdkBuildToolVersion), 'aapt.exe' if platform.system() == 'Windows' else 'aapt')
+    cmd_output = os.popen(f"{aapt_path} dump badging {apk_file_path}").read()
+    result = re.findall("versionName='(\S+)'", cmd_output)
+    assert len(result) > 0, ValueError('apk versionName is empty.')
+    return result[0]
+
+if __name__ == '__main__':
+    print(getApkVersionName('source/360.apk'))
